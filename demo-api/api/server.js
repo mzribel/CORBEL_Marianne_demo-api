@@ -16,6 +16,27 @@ const db = require('./db');
 const PORT = Number(process.env.PORT || 3000);
 const VERSION = process.env.VERSION || 'dev';
 
+// Notifier : Si NOTIFIER_URL est vide, pas d'appel
+const NOTIFIER_URL = process.env.NOTIFIER_URL || '';
+const NOTIFY_TIMEOUT_MS = Number(process.env.NOTIFY_TIMEOUT_MS || 1000);
+
+function notify(event, data) {
+  if (!NOTIFIER_URL) return;
+  fetch(`${NOTIFIER_URL}/notify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, data }),
+    signal: AbortSignal.timeout(NOTIFY_TIMEOUT_MS),
+  })
+    .then((r) => {
+      r.body?.cancel(); // Libère la connexion
+      if (!r.ok) console.warn(JSON.stringify({ level: 'warn', msg: 'notify failed', status: r.status }));
+    })
+    .catch((err) => {
+      console.warn(JSON.stringify({ level: 'warn', msg: 'notify failed', err: err.message }));
+    });
+}
+
 const app = express();
 app.use(express.json());
 
@@ -62,11 +83,18 @@ app.post('/products', async (req, res) => {
   if (!name || !Number.isInteger(priceCents) || priceCents < 0) {
     return res.status(400).json({ error: 'name (string) et price_cents (entier >= 0) requis' });
   }
+
+  let product;
   try {
-    res.status(201).json(await db.addProduct(name, priceCents));
+    product = await db.addProduct(name, priceCents);
   } catch (err) {
-    res.status(503).json({ error: 'db_unavailable', detail: err.message });
+    return res.status(503).json({ error: 'db_unavailable', detail: err.message });
   }
+
+  res.status(201).json(product);
+
+  // Notifier
+  notify('product.created', product); 
 });
 
 const server = app.listen(PORT, () => {

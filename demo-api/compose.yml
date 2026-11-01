@@ -5,6 +5,7 @@ services:
       PGHOST: db
       PGUSER: ${POSTGRES_USER:?POSTGRES_USER manquant dans .env}
       PGDATABASE: ${POSTGRES_DB:?POSTGRES_DB manquant dans .env}
+      NOTIFIER_URL: http://notifier:3000
     ports:
       - "${API_PORT:-8080}:3000"
     depends_on:
