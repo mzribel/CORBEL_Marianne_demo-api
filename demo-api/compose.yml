@@ -46,6 +46,14 @@ services:
       - demo_back
     restart: unless-stopped
 
+  notifier:
+    build: ./notifier
+    environment:
+      PORT: "3000"
+    networks:
+      - demo_back
+    restart: unless-stopped
+
 networks:
   demo_front:
   demo_back:
