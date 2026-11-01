@@ -1,5 +1,6 @@
 services:
   api:
+    image: ${REGISTRY_PREFIX:-demo}/api:${TAG:-dev}
     build: ./api
     environment:
       PGHOST: db
@@ -48,6 +49,7 @@ services:
     restart: unless-stopped
 
   notifier:
+    image: ${REGISTRY_PREFIX:-demo}/notifier:${TAG:-dev}
     build: ./notifier
     environment:
       PORT: "3000"

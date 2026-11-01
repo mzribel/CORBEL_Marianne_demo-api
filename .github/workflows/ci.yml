@@ -76,3 +76,56 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+  deploy:
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        working-directory: demo-api
+    steps:
+      - name: Checkout (compose.yml + db/init.sql)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Login GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Préparer la cible (.env + secret)
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=user
+          POSTGRES_DB=db
+          API_PORT=8080
+          ADMINER_PORT=8081
+          REGISTRY_PREFIX=ghcr.io/${GITHUB_REPOSITORY,,}
+          TAG=${GITHUB_REF_NAME#v}
+          EOF
+          mkdir -p secrets
+          echo "demo" > secrets/db_password.txt
+
+      - name: Déployer
+        run: |
+          docker compose pull
+          docker compose up -d --no-build --wait --wait-timeout 120
+
+      - name: Vérifier la stack déployée
+        run: |
+          docker compose images
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/products \
+            -H 'Content-Type: application/json' -d '{"name":"Deploy check","price_cents":100}')
+          echo "POST /products -> $code"
+          test "$code" = "201"
+          sleep 1
+          docker compose logs notifier | tail -5
+          docker compose logs notifier | grep -q 'notification received'
+
+      - name: Logs en cas d'échec
+        if: failure()
+        run: docker compose logs
